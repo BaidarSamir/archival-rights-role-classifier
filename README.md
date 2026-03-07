@@ -10,15 +10,15 @@
 
 ## Abstract
 
-This system classifies sentences within U.S. Board of Veterans' Appeals (BVA) decisions into six rhetorical roles — **Citation**, **Evidence**, **Finding of Fact**, **Legal Rule**, **Reasoning**, and **General Sentence** — using a bidirectional LSTM neural network with LegalBERT embeddings.
+This system classifies sentences in U.S. Board of Veterans' Appeals (BVA) decisions into six rhetorical roles: **Citation**, **Evidence**, **Finding of Fact**, **Legal Rule**, **Reasoning**, and **General Sentence**. It uses a bidirectional LSTM neural network with LegalBERT embeddings.
 
-Unlike a pure automation tool, this project is designed as an **archival decision-support system** that preserves the archivist's epistemic authority. It implements:
+This is a decision-support tool, not a full automation system. Archivists maintain final control over all classifications. Features include:
 
-1. **Uncertainty quantification** — Shannon entropy over the 6-class softmax distribution flags ambiguous predictions (max probability < 0.65) as `UNCERTAIN`, requiring mandatory human review.
-2. **PII pseudonymisation** — Named entity recognition (spaCy NER) detects and replaces personally identifiable information before classification, aligning with GDPR-informed data protection principles.
-3. **Human-in-the-loop correction audit trail** — Archivists can override any AI prediction; every correction is logged with a timestamp to a persistent CSV, providing accountability and retraining data.
-4. **EAD3 finding aid generation** — Classified sentences are automatically structured into a valid [Encoded Archival Description (EAD3)](https://www.loc.gov/ead/) XML document, ready for ingest into archival management systems.
-5. **Label contestation analysis** — Statistical analysis of the correction log reveals which rhetorical roles the model most frequently misclassifies, informing targeted model improvement and exposing the "interpretive gap" between machine classification and archival expertise.
+1. **Uncertainty quantification**: Shannon entropy flags ambiguous predictions (max probability < 0.65) as `UNCERTAIN` for mandatory human review.
+2. **PII pseudonymisation**: Named entity recognition detects and replaces personally identifiable information before classification.
+3. **Correction audit trail**: Archivists can override any prediction. Every correction is logged with a timestamp to a CSV file for accountability and retraining.
+4. **EAD3 finding aid generation**: Classified sentences are automatically structured into valid [Encoded Archival Description (EAD3)](https://www.loc.gov/ead/) XML documents for archival management systems.
+5. **Label contestation analysis**: The correction log shows which roles the model most frequently misclassifies, helping target model improvements.
 
 ---
 
@@ -28,36 +28,34 @@ The design is guided by three principles from archival science:
 
 | Principle | Implementation |
 |-----------|---------------|
-| **AI augments archivists, it does not replace them** | Uncertainty flagging + mandatory review for low-confidence predictions; no sentence is committed to the finding aid without the possibility of human override |
-| **Archives construct truth; archivists must be legally literate** | The system processes real BVA PTSD decisions, a corpus at the intersection of veterans' rights, mental health adjudication, and evidentiary standards |
-| **Data protection is an archival responsibility** | PII pseudonymisation operates before embedding, ensuring that personal data never reaches the classification model when enabled |
+| **AI augments archivists, it does not replace them** | Uncertainty flagging and mandatory review for low-confidence predictions. No sentence is committed without human review capability. |
+| **Archives construct truth. Archivists must be legally literate** | The system processes real BVA PTSD decisions involving veterans' rights, mental health adjudication, and evidentiary standards. |
+| **Data protection is an archival responsibility** | PII pseudonymisation runs before embedding, so personal data never reaches the classification model when enabled. |
 
 ---
 
 ## Human Rights Implications
 
-This system operates on **Board of Veterans' Appeals decisions** adjudicating PTSD service-connection claims — a domain where archival accuracy has direct consequences for veterans' access to disability benefits. Classification errors are not merely technical failures; they have **social justice implications**:
+This system processes **Board of Veterans' Appeals decisions** for PTSD service-connection claims. Archival accuracy directly affects veterans' access to disability benefits. Classification errors have real consequences:
 
-- **Evidence misclassified as Reasoning**: If the model misidentifies factual testimony (e.g., "The Veteran reported nightmares daily") as legal reasoning, archivists searching for evidentiary bases may miss critical testimony supporting the veteran's claim.
+- **Evidence misclassified as Reasoning**: If factual testimony ("The Veteran reported nightmares daily") is marked as legal reasoning, archivists may miss critical evidence.
   
-- **Finding misclassified as Sentence**: Board findings of fact are legally binding determinations. Misclassifying them as "general narrative" erases their adjudicative weight.
+- **Finding misclassified as Sentence**: Board findings are legally binding. Marking them as general narrative loses their legal weight.
 
-- **Citation errors**: Incorrectly identifying legal citations could obscure precedents establishing veterans' rights protections.
+- **Citation errors**: Missing legal citations obscures precedents for veterans' rights.
 
-The **contestation report** serves a dual purpose:
-1. **Technical**: Identifies model weaknesses for retraining
-2. **Ethical**: Reveals which rhetorical roles are most contested, exposing where machine interpretation diverges from archival/legal expertise — i.e., where **automated classification would have gotten it wrong** without human oversight
+The **contestation report** identifies model weaknesses for retraining and shows where the model disagrees with archivists most often.
 
 ### Corpus Limitations
 
-The VetClaims-JSON dataset contains only **PTSD service-connection claims**, which introduces selection bias:
-- PTSD claims have unique evidentiary challenges (stressor corroboration, nexus opinions)
-- The model has not been tested on claims for physical disabilities, which may have different rhetorical patterns
-- Future work should examine whether the model performs differently on **granted vs. denied claims** — a disparity would suggest the AI is learning case outcomes rather than rhetorical roles, which could perpetuate systemic biases.
+The VetClaims-JSON dataset contains only **PTSD service-connection claims**, which creates selection bias:
+- PTSD claims have unique evidentiary requirements (stressor corroboration, nexus opinions)
+- The model has not been tested on physical disability claims, which may have different patterns
+- Future work should test performance on granted vs. denied claims. Different performance would mean the model is learning case outcomes instead of rhetorical roles.
 
 ### Archival Responsibility
 
-By flagging uncertain classifications and preserving the correction audit trail, this system embodies the principle that **archives are not neutral** — every classification act is an interpretive choice that shapes how future researchers access these records. The archivist retains final authority because they, not the machine, understand the **social and legal context** of these decisions.
+By flagging uncertain classifications and keeping the correction audit trail, this system recognizes that **archives are not neutral**. Every classification is an interpretive choice that affects how researchers access records. Archivists retain final authority because they understand the **social and legal context** of these decisions.
 
 ---
 
@@ -119,26 +117,26 @@ Reference:
 ```
 ├── src/
 │   ├── webapp.py                    # FastAPI backend (endpoints: /, /doc, /correct, /finding-aid, /contestation)
-│   ├── pii_filter.py                # spaCy NER-based PII detection & pseudonymisation     [NEW]
-│   ├── finding_aid.py               # EAD3 XML finding aid generator                       [NEW]
+	├── pii_filter.py                # spaCy NER-based PII detection & pseudonymisation
+	├── finding_aid.py               # EAD3 XML finding aid generator
 │   ├── segmentation_pipeline.py     # Custom legal sentence boundary detection
 │   ├── segmenter.py                 # spaCy segmenter with legal-domain rules
 │   ├── sentence_encoder.py          # LegalBERT sentence embedding
 │   ├── dataset_preparation.py       # Corpus preprocessing
 │   ├── dataset_analyze.py           # Exploratory data analysis
 │   └── classification/
-│       ├── prediction.py            # Inference with entropy & uncertainty          [MODIFIED]
+│       ├── prediction.py            # Inference with entropy & uncertainty
 │       ├── nn_models.py             # LSTM_Net architecture definition
 │       ├── custom_pytorch_dataset.py
 │       ├── train.py                 # Training loop with Dice Loss
 │       └── dice_loss.py             # Dice coefficient loss function
 ├── web_app_templates/
-│   └── index.html                   # UI: classification table, EAD download, contestation [MODIFIED]
+│   └── index.html                   # UI: classification table, EAD download, contestation
 ├── data/
 │   ├── model_weights/               # Pre-trained LSTM weights (.dat)
 │   ├── BVA Decisions JSON Format/   # 50 original BVA decisions
 │   ├── BVA Decisions JSON Format +25/ # 25 additional decisions
-│   ├── correction_log.csv           # Archivist correction audit trail              [GENERATED]
+	├── correction_log.csv           # Archivist correction audit trail
 │   └── *.p                          # Pickled DataFrames (embeddings, labels)
 ├── pyproject.toml                   # Python dependency specification
 └── README.md
@@ -246,7 +244,7 @@ pip install scikit-learn seaborn matplotlib
 
 The bidirectional LSTM with LegalBERT embeddings, trained with Dice Loss on the balanced VetClaims dataset, achieves results consistent with Walker et al. (2019):
 
-<img src="./data/graphs/confusion_matrix_lstm_test.png" alt="Confusion Matrix" height="400"/>
+<img src="./Legal-Sentence-Role-Classification-main/data/graphs/confusion_matrix_lstm_test.png" alt="Confusion Matrix" height="400"/>
 
 ---
 
@@ -255,23 +253,23 @@ The bidirectional LSTM with LegalBERT embeddings, trained with Dice Loss on the 
 | Decision | Rationale |
 |----------|-----------|
 | **Threshold 0.65 for uncertainty** | Balances false-positive uncertain flags against missed ambiguities; tunable per deployment |
-| **Shannon entropy (not just max-prob)** | Entropy captures *distribution shape* — a flat 6-way distribution (H ≈ 1.79) is qualitatively different from a peaked bimodal one, even at the same max-prob |
+| **Shannon entropy (not just max-prob)** | Entropy captures distribution shape. A flat 6-way distribution (H ≈ 1.79) is different from a peaked bimodal one, even at the same max-prob. |
 | **PII filter before encoding** | Ensures personal data never reaches the embedding model, implementing *privacy by design* |
 | **EAD3 (not EAD 2002)** | EAD3 is the current standard maintained by SAA/LoC since 2015 |
-| **CSV correction log (not database)** | Simplicity, portability, and transparency — archivists can inspect/edit/export the log directly |
+| **CSV correction log (not database)** | Simple, portable, transparent. Archivists can inspect/edit/export the log directly. |
 | **Dice Loss (not Cross-Entropy)** | Handles severe class imbalance (Sentence class dominates) without explicit class weighting |
 
 ---
 
 ## Relevance to Archival Science
 
-This project demonstrates competencies directly aligned with modern archival curricula:
+This project demonstrates practical skills for modern archival work:
 
-- **Digital preservation**: Generating machine-readable, standards-compliant finding aids (EAD3) from unstructured legal text
-- **Appraisal under uncertainty**: The entropy-based flagging system models the archival concept that classification is an *interpretive act*, not a deterministic one
-- **Data protection**: PII pseudonymisation reflects the GDPR principles of data minimisation and purpose limitation
-- **Accountability**: The correction audit trail provides a *record of archival decision-making*, itself an archival object
-- **Human rights documentation**: The BVA PTSD corpus represents adjudication of veterans' rights claims — a domain where archival accuracy has direct consequences for access to benefits
+- **Digital preservation**: Generates standards-compliant finding aids (EAD3) from unstructured legal text
+- **Appraisal under uncertainty**: Entropy flagging recognizes that classification requires interpretation, not just automation
+- **Data protection**: PII pseudonymisation follows GDPR principles of data minimization
+- **Accountability**: The correction audit trail documents archival decision-making
+- **Human rights documentation**: Works with veterans' rights claims where archival accuracy affects access to benefits
 
 ---
 
@@ -285,11 +283,11 @@ This project demonstrates competencies directly aligned with modern archival cur
 
 ## License
 
-This work extends an academic project for educational and research purposes. See the original repository for licensing terms.
+This project is for educational and research purposes.
 ---
 # Dataset Description
 
-![Dataset Full](./data/graphs/distribution_rhetorical_roles_full.png)
+![Dataset Full](./Legal-Sentence-Role-Classification-main/data/graphs/distribution_rhetorical_roles_full.png)
 
 ## Documents Dataframe:
 - docId: Document ID

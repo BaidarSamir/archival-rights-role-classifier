@@ -1,0 +1,26 @@
+[project]
+name = "legal-sentence-role-classifier"
+version = "0.1.0"
+description = "Archival decision-support tool: segments BVA legal decisions into sentences, classifies rhetorical roles, with PII pseudonymization and human-in-the-loop correction."
+requires-python = ">=3.10"
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sentence-transformers>=3.0",
+    "spacy>=3.7",
+    "torch>=2.0",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "jinja2>=3.1",
+    "pydantic>=2.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+# Only needed for training models and generating evaluation graphs
+train = [
+    "scikit-learn>=1.5",
+    "seaborn>=0.13",
+    "matplotlib>=3.9",
+]

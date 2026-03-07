@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Legal Sentence Role Classifier</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert/2.1.2/sweetalert.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.0/plotly.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="jumbotron">
+        <h1> Legal Sentence Segmenter & Role Classifier</h1>
+    </div>
+    <div class="form-group">
+        <label for="document_text">Veteran Appeals Document to be parsed:</label>
+        <textarea class="form-control" id="document_text" rows="8">Paste your Document here....</textarea>
+    </div>
+    <br>
+    <div class="checkbox" style="margin-top:10px;">
+        <label>
+            <input type="checkbox" id="pseudonymize_toggle"> Pseudonymize sensitive entities (names, dates, locations) before processing
+        </label>
+    </div>
+    <br>
+    <button class="btn btn-success" onclick="performEval()"> Perform Evaluation</button>
+    <button class="btn btn-info" id="btn_download_ead" onclick="downloadFindingAid()" style="display:none;margin-left:10px;">
+        &#128196; Download Finding Aid (EAD-XML)
+    </button>
+    <button class="btn btn-warning" id="btn_contestation" onclick="loadContestation()" style="margin-left:10px;">
+        &#128202; Label Contestation Report
+    </button>
+    <br>
+    <div id="histo" style="   margin: auto;width:1000px;height:400px;"></div>
+
+
+    <hr style="width:100%;text-align:left;margin-left:0">
+    <h1>Select Rhetorical Roles</h1>
+
+    <div id="bulk_result" style="display: grid; grid-template-columns: repeat(8, 1fr); grid-gap: 10px;">
+        <div id="All" data-role="fieldcontain">
+            <label for="All">All</label>
+            <input id="All" name="remember" type="radio" onclick="filter('All')"/>
+        </div>
+        <div id="UNCERTAIN" data-role="fieldcontain">
+            <label for="UNCERTAIN" style="color:#856404;">&#9888; Uncertain</label>
+            <input id="UNCERTAIN" name="remember" type="radio" onclick="filter('UNCERTAIN')"/>
+        </div>
+        <div id="Citation" data-role="fieldcontain">
+            <label for="Citation">Citation</label>
+            <input id="Citation" name="remember" type="radio" onclick="filter('Citation')"/>
+        </div>
+        <div id="Finding" data-role="fieldcontain">
+            <label for="Finding">Finding</label>
+            <input id="Finding" name="remember" type="radio" onclick="filter('Finding')"/>
+        </div>
+        <div id="Evidence" data-role="fieldcontain">
+            <label for="Evidence">Evidence</label>
+            <input id="Evidence" name="remember" type="radio" onclick="filter('Evidence')"/>
+        </div>
+        <div id="Legal Rule" data-role="fieldcontain">
+            <label for="Legal Rule">Legal Rule</label>
+            <input id="Legal Rule" name="remember" type="radio" onclick="filter('Legal Rule')"/>
+        </div>
+        <div id="Reasoning" data-role="fieldcontain">
+            <label for="Reasoning">Reasoning</label>
+            <input id="Reasoning" name="remember" type="radio" onclick="filter('Reasoning')"/>
+        </div>
+        <div id="Sentence" data-role="fieldcontain">
+            <label for="Sentence">Sentence</label>
+            <input id="Sentence" name="remember" type="radio" onclick="filter('Sentence')"/>
+        </div>
+    </div>
+    <hr style="width:100%;text-align:left;margin-left:0">
+
+
+    <h1>Sentences</h1>
+
+    <table class="table">
+        <thead>
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Sentence</th>
+            <th scope="col">Class</th>
+            <th scope="col">(Pseudo-) Probability</th>
+            <th scope="col" title="Shannon entropy over 6 classes (0 = fully certain, 1.79 = maximum uncertainty)">Entropy</th>
+            <th scope="col">Correct Role</th>
+        </tr>
+        </thead>
+        <tbody id="sentence_table_body">
+        <tr>
+
+        </tr>
+
+        </tbody>
+    </table>
+
+    <!-- Contestation Report Panel -->
+    <div id="contestation_panel" style="display:none;margin-top:20px;">
+        <hr>
+        <h2>Label Contestation Report</h2>
+        <p class="text-muted">Analysis of archivist corrections — shows where the AI model is most frequently overridden.</p>
+        <div id="contestation_content"></div>
+    </div>
+</div>
+
+</body>
+<script>
+    var ROLES = ['Citation', 'Evidence', 'Finding', 'Legal Rule', 'Reasoning', 'Sentence'];
+
+    function draw_histo() {
+        var histo = document.getElementById('histo');
+        var x = [];
+        var items = JSON.parse(window.localStorage.getItem('data'));
+        for (var i = 0; i < items.length; i++) {
+            x[i] = items[i].role;
+        }
+        var trace = { x: x, type: 'histogram' };
+        Plotly.newPlot(histo, [trace]);
+    }
+
+    function filter(selected) {
+        var data = JSON.parse(window.localStorage.getItem('data'));
+        if (selected === 'All') {
+            fillTable(data);
+        } else {
+            fillTable(data.filter(function(s) { return s.role === selected; }));
+        }
+    }
+
+    function fillTable(data) {
+        var tablebody = document.getElementById('sentence_table_body');
+        tablebody.innerHTML = '';
+        for (var i = 0; i < data.length; i++) {
+            var tr = document.createElement('tr');
+            if (data[i].uncertain) {
+                tr.style.backgroundColor = '#fff3cd';
+            }
+            var classCell = data[i].uncertain
+                ? '<span style="color:#856404;font-weight:bold;">&#9888; UNCERTAIN</span><br><small>Suggested: ' + data[i].suggested_role + '</small>'
+                : data[i].role;
+            var options = ROLES.map(function(r) {
+                return '<option value="' + r + '"' + (r === data[i].suggested_role ? ' selected' : '') + '>' + r + '</option>';
+            }).join('');
+            var correctionCell = '<select id="sel_' + i + '">' + options + '</select>'
+                + ' <button class="btn btn-xs btn-default" onclick="submitCorrection(' + i + ')">&#10003;</button>';
+            tr.innerHTML = '<th scope="row">' + i + '</th>'
+                + '<td>' + data[i].sentence + '</td>'
+                + '<td>' + classCell + '</td>'
+                + '<td>' + data[i].prob + '</td>'
+                + '<td>' + data[i].entropy + '</td>'
+                + '<td>' + correctionCell + '</td>';
+            tablebody.appendChild(tr);
+        }
+    }
+
+    function submitCorrection(rowIndex) {
+        var data = JSON.parse(window.localStorage.getItem('data'));
+        var payload = {
+            sentence: data[rowIndex].sentence,
+            predicted_role: data[rowIndex].suggested_role,
+            corrected_role: document.getElementById('sel_' + rowIndex).value
+        };
+        $.ajax({
+            type: 'POST',
+            url: '/correct',
+            data: JSON.stringify(payload),
+            contentType: 'application/json',
+            success: function() {
+                swal('Correction logged', 'The archivist correction has been saved to the audit trail.', 'success');
+            },
+            error: function() {
+                swal('Error', 'Could not log correction.', 'error');
+            }
+        });
+    }
+
+    function performEval() {
+        var text = document.getElementById('document_text').value;
+        var pseudonymize = document.getElementById('pseudonymize_toggle').checked;
+        $.ajax({
+            type: 'POST',
+            url: '/doc',
+            data: JSON.stringify({ text: text, pseudonymize: pseudonymize }),
+            contentType: 'application/json',
+            Accept: 'application/json',
+            cache: false,
+            processData: false,
+            success: function(data) {
+                window.localStorage.setItem('data', JSON.stringify(data));
+                fillTable(data);
+                draw_histo();
+                document.getElementById('btn_download_ead').style.display = 'inline-block';
+            }
+        });
+    }
+
+    function downloadFindingAid() {
+        var data = JSON.parse(window.localStorage.getItem('data'));
+        if (!data || data.length === 0) {
+            swal('No data', 'Run an evaluation first.', 'warning');
+            return;
+        }
+        var payload = {
+            sentences: data,
+            title: 'BVA Decision — AI-Assisted Finding Aid',
+            decision_date: ''
+        };
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/finding-aid', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.responseType = 'blob';
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var blob = new Blob([xhr.response], {type: 'application/xml'});
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'finding_aid.ead.xml';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                swal('Finding Aid Downloaded', 'EAD3 XML file saved. Ready for archival ingest.', 'success');
+            }
+        };
+        xhr.send(JSON.stringify(payload));
+    }
+
+    function loadContestation() {
+        $.ajax({
+            type: 'GET',
+            url: '/contestation',
+            contentType: 'application/json',
+            success: function(data) {
+                var panel = document.getElementById('contestation_panel');
+                var content = document.getElementById('contestation_content');
+                panel.style.display = 'block';
+
+                if (data.error) {
+                    content.innerHTML = '<div class="alert alert-info">' + data.error + '</div>';
+                    return;
+                }
+
+                var html = '<div class="row">';
+                html += '<div class="col-md-4"><div class="panel panel-default"><div class="panel-heading"><strong>Total Corrections</strong></div>';
+                html += '<div class="panel-body" style="font-size:2em;text-align:center;">' + data.total_corrections + '</div></div></div>';
+
+                html += '<div class="col-md-4"><div class="panel panel-danger"><div class="panel-heading"><strong>Most Contested Role</strong></div>';
+                html += '<div class="panel-body" style="font-size:1.5em;text-align:center;">' + (data.most_contested_role || 'N/A') + '</div></div></div>';
+
+                html += '<div class="col-md-4"><div class="panel panel-info"><div class="panel-heading"><strong>Corrections per Predicted Role</strong></div>';
+                html += '<div class="panel-body"><ul class="list-group">';
+                if (data.corrections_by_predicted_role) {
+                    for (var role in data.corrections_by_predicted_role) {
+                        html += '<li class="list-group-item">' + role + ' <span class="badge">' + data.corrections_by_predicted_role[role] + '</span></li>';
+                    }
+                }
+                html += '</ul></div></div></div></div>';
+
+                // Confusion pairs table
+                if (data.confusion_pairs && Object.keys(data.confusion_pairs).length > 0) {
+                    html += '<h3>Confusion Pairs (Predicted → Corrected)</h3>';
+                    html += '<table class="table table-bordered table-condensed"><thead><tr><th>Predicted</th><th>Corrected To</th><th>Count</th></tr></thead><tbody>';
+                    for (var pred in data.confusion_pairs) {
+                        for (var corr in data.confusion_pairs[pred]) {
+                            var cls = pred !== corr ? 'danger' : 'success';
+                            html += '<tr class="' + cls + '"><td>' + pred + '</td><td>' + corr + '</td><td>' + data.confusion_pairs[pred][corr] + '</td></tr>';
+                        }
+                    }
+                    html += '</tbody></table>';
+                }
+
+                content.innerHTML = html;
+            },
+            error: function() {
+                swal('Error', 'Could not load contestation report.', 'error');
+            }
+        });
+    }
+</script>
+</html>

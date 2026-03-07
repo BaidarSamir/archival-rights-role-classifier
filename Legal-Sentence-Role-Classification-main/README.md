@@ -117,26 +117,26 @@ Reference:
 ```
 ├── src/
 │   ├── webapp.py                    # FastAPI backend (endpoints: /, /doc, /correct, /finding-aid, /contestation)
-│   ├── pii_filter.py                # spaCy NER-based PII detection & pseudonymisation     [NEW]
-│   ├── finding_aid.py               # EAD3 XML finding aid generator                       [NEW]
+│   ├── pii_filter.py                # spaCy NER-based PII detection & pseudonymisation
+│   ├── finding_aid.py               # EAD3 XML finding aid generator
 │   ├── segmentation_pipeline.py     # Custom legal sentence boundary detection
 │   ├── segmenter.py                 # spaCy segmenter with legal-domain rules
 │   ├── sentence_encoder.py          # LegalBERT sentence embedding
 │   ├── dataset_preparation.py       # Corpus preprocessing
 │   ├── dataset_analyze.py           # Exploratory data analysis
 │   └── classification/
-│       ├── prediction.py            # Inference with entropy & uncertainty          [MODIFIED]
+│       ├── prediction.py            # Inference with entropy & uncertainty
 │       ├── nn_models.py             # LSTM_Net architecture definition
 │       ├── custom_pytorch_dataset.py
 │       ├── train.py                 # Training loop with Dice Loss
 │       └── dice_loss.py             # Dice coefficient loss function
 ├── web_app_templates/
-│   └── index.html                   # UI: classification table, EAD download, contestation [MODIFIED]
+│   └── index.html                   # UI: classification table, EAD download, contestation
 ├── data/
 │   ├── model_weights/               # Pre-trained LSTM weights (.dat)
 │   ├── BVA Decisions JSON Format/   # 50 original BVA decisions
 │   ├── BVA Decisions JSON Format +25/ # 25 additional decisions
-│   ├── correction_log.csv           # Archivist correction audit trail              [GENERATED]
+│   ├── correction_log.csv           # Archivist correction audit trail
 │   └── *.p                          # Pickled DataFrames (embeddings, labels)
 ├── pyproject.toml                   # Python dependency specification
 └── README.md
@@ -244,7 +244,7 @@ pip install scikit-learn seaborn matplotlib
 
 The bidirectional LSTM with LegalBERT embeddings, trained with Dice Loss on the balanced VetClaims dataset, achieves results consistent with Walker et al. (2019):
 
-<img src="./data/graphs/confusion_matrix_lstm_test.png" alt="Confusion Matrix" height="400"/>
+<img src="./Legal-Sentence-Role-Classification-main/data/graphs/confusion_matrix_lstm_test.png" alt="Confusion Matrix" height="400"/>
 
 ---
 
@@ -287,7 +287,7 @@ This project is for educational and research purposes.
 ---
 # Dataset Description
 
-![Dataset Full](./data/graphs/distribution_rhetorical_roles_full.png)
+![Dataset Full](./Legal-Sentence-Role-Classification-main/data/graphs/distribution_rhetorical_roles_full.png)
 
 ## Documents Dataframe:
 - docId: Document ID

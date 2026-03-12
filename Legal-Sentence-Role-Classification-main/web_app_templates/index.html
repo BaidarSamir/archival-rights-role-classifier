@@ -2,165 +2,916 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Legal Sentence Role Classifier</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BVA Decision Viewer — Rhetorical Role Classifier</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert/2.1.2/sweetalert.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.0/plotly.min.js"></script>
+    <style>
+        :root {
+            --color-citation:   #6366f1;
+            --color-evidence:   #22c55e;
+            --color-finding:    #f59e0b;
+            --color-legalrule:  #ef4444;
+            --color-reasoning:  #3b82f6;
+            --color-sentence:   #8b5cf6;
+            --bg-citation:      #eef2ff;
+            --bg-evidence:      #f0fdf4;
+            --bg-finding:       #fffbeb;
+            --bg-legalrule:     #fef2f2;
+            --bg-reasoning:     #eff6ff;
+            --bg-sentence:      #f5f3ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        /* ── Header ── */
+        .app-header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+            padding: 28px 0 24px;
+            margin-bottom: 32px;
+        }
+        .app-header h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin: 0 0 4px;
+            letter-spacing: -0.3px;
+        }
+        .app-header p {
+            margin: 0;
+            opacity: 0.7;
+            font-size: 14px;
+        }
+
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px 60px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 16px;
+            color: #334155;
+        }
+
+        /* ── Input Area ── */
+        #document_text {
+            width: 100%;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.2s;
+            min-height: 140px;
+        }
+        #document_text:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        .controls-row label {
+            font-size: 13px;
+            color: #64748b;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary-action {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-primary-action:hover { background: #2563eb; }
+        .btn-primary-action:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary-action {
+            background: white;
+            color: #475569;
+            border: 1.5px solid #cbd5e1;
+            padding: 9px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-secondary-action:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Stats Bar ── */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .stat-card .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .stat-card .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* ── Role Filter Pills ── */
+        .role-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .role-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 20px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .role-pill:hover { border-color: #94a3b8; }
+        .role-pill.active { border-color: #3b82f6; background: #eff6ff; color: #2563eb; font-weight: 600; }
+        .role-pill .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .role-pill .count {
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: 10px;
+        }
+        .role-pill.active .count { background: #dbeafe; color: #2563eb; }
+
+        /* ── Document Viewer ── */
+        .viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .viewer-header h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .viewer-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        #document_viewer {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .sent-row {
+            display: grid;
+            grid-template-columns: 40px 1fr 180px;
+            gap: 0;
+            align-items: stretch;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.15s;
+            cursor: pointer;
+            position: relative;
+        }
+        .sent-row:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+
+        .sent-index {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            background: #f8fafc;
+            padding: 12px 0;
+        }
+
+        .sent-text {
+            padding: 12px 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            border-left: 4px solid transparent;
+        }
+
+        .sent-meta {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8px 14px;
+            gap: 5px;
+            background: rgba(0,0,0,0.02);
+        }
+
+        .role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .confidence-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .confidence-bar-track {
+            flex: 1;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .confidence-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .confidence-label {
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 36px;
+            text-align: right;
+        }
+
+        .entropy-label {
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        /* ── Role Colors ── */
+        .sent-row[data-role="Citation"]    .sent-text { border-left-color: var(--color-citation); background: var(--bg-citation); }
+        .sent-row[data-role="Evidence"]    .sent-text { border-left-color: var(--color-evidence); background: var(--bg-evidence); }
+        .sent-row[data-role="Finding"]     .sent-text { border-left-color: var(--color-finding); background: var(--bg-finding); }
+        .sent-row[data-role="Legal Rule"]  .sent-text { border-left-color: var(--color-legalrule); background: var(--bg-legalrule); }
+        .sent-row[data-role="Reasoning"]   .sent-text { border-left-color: var(--color-reasoning); background: var(--bg-reasoning); }
+        .sent-row[data-role="Sentence"]    .sent-text { border-left-color: var(--color-sentence); background: var(--bg-sentence); }
+
+        .role-badge[data-role="Citation"]   { background: #e0e7ff; color: var(--color-citation); }
+        .role-badge[data-role="Evidence"]   { background: #dcfce7; color: #16a34a; }
+        .role-badge[data-role="Finding"]    { background: #fef3c7; color: #d97706; }
+        .role-badge[data-role="Legal Rule"] { background: #fee2e2; color: var(--color-legalrule); }
+        .role-badge[data-role="Reasoning"]  { background: #dbeafe; color: var(--color-reasoning); }
+        .role-badge[data-role="Sentence"]   { background: #ede9fe; color: var(--color-sentence); }
+
+        .conf-high  { color: #16a34a; }
+        .conf-mid   { color: #d97706; }
+        .conf-low   { color: #dc2626; }
+        .bar-high   { background: #22c55e; }
+        .bar-mid    { background: #f59e0b; }
+        .bar-low    { background: #ef4444; }
+
+        /* ── Uncertain Flag ── */
+        .sent-row.uncertain {
+            border: 2px solid #f59e0b;
+            box-shadow: inset 0 0 0 1px #fde68a;
+        }
+        .sent-row.uncertain .sent-index {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .uncertain-icon {
+            color: #d97706;
+            font-size: 14px;
+            margin-right: 3px;
+        }
+
+        /* ── Correction Dropdown ── */
+        .correction-panel {
+            display: none;
+            grid-column: 1 / -1;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 12px 20px;
+            animation: slideDown 0.15s ease;
+        }
+        .correction-panel.open { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .correction-panel label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            margin: 0;
+        }
+        .correction-panel select {
+            padding: 6px 12px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+        }
+        .correction-panel .btn-correct {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .correction-panel .btn-correct:hover { background: #16a34a; }
+
+        /* ── Word Attribution ── */
+        .attr-word {
+            display: inline;
+            padding: 1px 2px;
+            border-radius: 3px;
+            cursor: default;
+            position: relative;
+            transition: opacity 0.15s;
+        }
+        .attr-word:hover {
+            outline: 2px solid rgba(0,0,0,0.2);
+        }
+        .attr-tooltip {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 4px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .attr-word:hover .attr-tooltip { display: block; }
+        .attr-loading {
+            font-size: 12px;
+            color: #94a3b8;
+            padding: 8px 0 4px;
+        }
+        .attr-loading .mini-spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid #e2e8f0;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.5s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        .attribution-row {
+            grid-column: 1 / -1;
+            padding: 8px 56px 12px;
+            background: rgba(0,0,0,0.015);
+            border-top: 1px dashed #e2e8f0;
+            line-height: 2;
+            display: none;
+        }
+        .attribution-row.open { display: block; animation: slideDown 0.15s ease; }
+        .attr-legend {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        .attr-legend .grad-bar {
+            width: 80px;
+            height: 10px;
+            border-radius: 3px;
+        }
+
+        /* ── Confidence Timeline ── */
+        #confidence_timeline {
+            width: 100%;
+            height: 220px;
+        }
+
+        /* ── Chart ── */
+        #histo {
+            width: 100%;
+            height: 320px;
+        }
+
+        /* ── Contestation Panel ── */
+        #contestation_panel {
+            display: none;
+        }
+        .contest-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .contest-card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .contest-card .big-num { font-size: 32px; font-weight: 700; color: #1e293b; }
+        .contest-card .sub { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* ── Legend ── */
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 14px 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            margin-bottom: 24px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #475569;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        /* ── Empty State ── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #94a3b8;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state p { font-size: 15px; }
+
+        /* ── Transitions ── */
+        .fade-in { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-    <div class="jumbotron">
-        <h1> Legal Sentence Segmenter & Role Classifier</h1>
-    </div>
-    <div class="form-group">
-        <label for="document_text">Veteran Appeals Document to be parsed:</label>
-        <textarea class="form-control" id="document_text" rows="8">Paste your Document here....</textarea>
-    </div>
-    <br>
-    <div class="checkbox" style="margin-top:10px;">
-        <label>
-            <input type="checkbox" id="pseudonymize_toggle"> Pseudonymize sensitive entities (names, dates, locations) before processing
-        </label>
-    </div>
-    <br>
-    <button class="btn btn-success" onclick="performEval()"> Perform Evaluation</button>
-    <button class="btn btn-info" id="btn_download_ead" onclick="downloadFindingAid()" style="display:none;margin-left:10px;">
-        &#128196; Download Finding Aid (EAD-XML)
-    </button>
-    <button class="btn btn-warning" id="btn_contestation" onclick="loadContestation()" style="margin-left:10px;">
-        &#128202; Label Contestation Report
-    </button>
-    <br>
-    <div id="histo" style="   margin: auto;width:1000px;height:400px;"></div>
 
-
-    <hr style="width:100%;text-align:left;margin-left:0">
-    <h1>Select Rhetorical Roles</h1>
-
-    <div id="bulk_result" style="display: grid; grid-template-columns: repeat(8, 1fr); grid-gap: 10px;">
-        <div id="All" data-role="fieldcontain">
-            <label for="All">All</label>
-            <input id="All" name="remember" type="radio" onclick="filter('All')"/>
-        </div>
-        <div id="UNCERTAIN" data-role="fieldcontain">
-            <label for="UNCERTAIN" style="color:#856404;">&#9888; Uncertain</label>
-            <input id="UNCERTAIN" name="remember" type="radio" onclick="filter('UNCERTAIN')"/>
-        </div>
-        <div id="Citation" data-role="fieldcontain">
-            <label for="Citation">Citation</label>
-            <input id="Citation" name="remember" type="radio" onclick="filter('Citation')"/>
-        </div>
-        <div id="Finding" data-role="fieldcontain">
-            <label for="Finding">Finding</label>
-            <input id="Finding" name="remember" type="radio" onclick="filter('Finding')"/>
-        </div>
-        <div id="Evidence" data-role="fieldcontain">
-            <label for="Evidence">Evidence</label>
-            <input id="Evidence" name="remember" type="radio" onclick="filter('Evidence')"/>
-        </div>
-        <div id="Legal Rule" data-role="fieldcontain">
-            <label for="Legal Rule">Legal Rule</label>
-            <input id="Legal Rule" name="remember" type="radio" onclick="filter('Legal Rule')"/>
-        </div>
-        <div id="Reasoning" data-role="fieldcontain">
-            <label for="Reasoning">Reasoning</label>
-            <input id="Reasoning" name="remember" type="radio" onclick="filter('Reasoning')"/>
-        </div>
-        <div id="Sentence" data-role="fieldcontain">
-            <label for="Sentence">Sentence</label>
-            <input id="Sentence" name="remember" type="radio" onclick="filter('Sentence')"/>
-        </div>
-    </div>
-    <hr style="width:100%;text-align:left;margin-left:0">
-
-
-    <h1>Sentences</h1>
-
-    <table class="table">
-        <thead>
-        <tr>
-            <th scope="col">#</th>
-            <th scope="col">Sentence</th>
-            <th scope="col">Class</th>
-            <th scope="col">(Pseudo-) Probability</th>
-            <th scope="col" title="Shannon entropy over 6 classes (0 = fully certain, 1.79 = maximum uncertainty)">Entropy</th>
-            <th scope="col">Correct Role</th>
-        </tr>
-        </thead>
-        <tbody id="sentence_table_body">
-        <tr>
-
-        </tr>
-
-        </tbody>
-    </table>
-
-    <!-- Contestation Report Panel -->
-    <div id="contestation_panel" style="display:none;margin-top:20px;">
-        <hr>
-        <h2>Label Contestation Report</h2>
-        <p class="text-muted">Analysis of archivist corrections — shows where the AI model is most frequently overridden.</p>
-        <div id="contestation_content"></div>
+<!-- Header -->
+<div class="app-header">
+    <div class="main-container">
+        <h1>BVA Decision Viewer</h1>
+        <p>Rhetorical Role Classification &amp; Archival Support System</p>
     </div>
 </div>
 
-</body>
+<div class="main-container">
+
+    <!-- Input Card -->
+    <div class="card">
+        <div class="card-title">Paste BVA Decision Text</div>
+        <textarea id="document_text" placeholder="Paste the full text of a Board of Veterans' Appeals decision here..."></textarea>
+        <div class="controls-row">
+            <label>
+                <input type="checkbox" id="pseudonymize_toggle">
+                Pseudonymize PII (names, dates, locations)
+            </label>
+            <div style="flex:1;"></div>
+            <button class="btn-primary-action" id="btn_eval" onclick="performEval()">Classify Sentences</button>
+        </div>
+    </div>
+
+    <!-- Results Area (hidden until evaluation) -->
+    <div id="results_area" style="display:none;" class="fade-in">
+
+        <!-- Stats Bar -->
+        <div class="stats-bar" id="stats_bar"></div>
+
+        <!-- Confidence Timeline -->
+        <div class="card">
+            <div class="card-title">Confidence &amp; Entropy Timeline</div>
+            <div id="confidence_timeline"></div>
+        </div>
+
+        <!-- Role Distribution Chart -->
+        <div class="card">
+            <div class="card-title">Role Distribution</div>
+            <div id="histo"></div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-citation);"></div>Citation</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-evidence);"></div>Evidence</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-finding);"></div>Finding</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-legalrule);"></div>Legal Rule</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-reasoning);"></div>Reasoning</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--color-sentence);"></div>General Sentence</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f59e0b; border: 2px solid #d97706;"></div>Uncertain (needs review)</div>
+        </div>
+
+        <!-- Document Viewer Header -->
+        <div class="viewer-header">
+            <h2>Document Viewer</h2>
+            <div class="viewer-actions">
+                <button class="btn-secondary-action" id="btn_download_ead" onclick="downloadFindingAid()">&#128196; Download EAD3 XML</button>
+                <button class="btn-secondary-action" id="btn_contestation" onclick="loadContestation()">&#128202; Contestation Report</button>
+            </div>
+        </div>
+
+        <!-- Role Filter Pills -->
+        <div class="role-filters" id="role_filters"></div>
+
+        <!-- The Sentence-by-Sentence Document Viewer -->
+        <div id="document_viewer">
+            <div class="empty-state">
+                <div class="icon">&#128209;</div>
+                <p>Sentences will appear here after classification.</p>
+            </div>
+        </div>
+
+        <!-- Contestation Report Panel -->
+        <div id="contestation_panel" class="card" style="margin-top:24px;">
+            <div class="card-title">Label Contestation Report</div>
+            <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">Analysis of archivist corrections — shows where the model is most frequently overridden.</p>
+            <div id="contestation_content"></div>
+        </div>
+    </div>
+
+</div>
+
 <script>
     var ROLES = ['Citation', 'Evidence', 'Finding', 'Legal Rule', 'Reasoning', 'Sentence'];
+    var ROLE_COLORS = {
+        'Citation':   '#6366f1',
+        'Evidence':   '#22c55e',
+        'Finding':    '#f59e0b',
+        'Legal Rule': '#ef4444',
+        'Reasoning':  '#3b82f6',
+        'Sentence':   '#8b5cf6'
+    };
+    var MAX_ENTROPY = Math.log(6);  // ~1.79, maximum Shannon entropy for 6 classes
+    var activeFilter = 'All';
 
-    function draw_histo() {
-        var histo = document.getElementById('histo');
-        var x = [];
-        var items = JSON.parse(window.localStorage.getItem('data'));
-        for (var i = 0; i < items.length; i++) {
-            x[i] = items[i].role;
-        }
-        var trace = { x: x, type: 'histogram' };
-        Plotly.newPlot(histo, [trace]);
+    /* ──────────── Stats Bar ──────────── */
+    function renderStats(data) {
+        var total = data.length;
+        var uncertain = data.filter(function(d) { return d.uncertain; }).length;
+        var avgProb = data.reduce(function(s, d) { return s + d.prob; }, 0) / (total || 1);
+        var avgEntropy = data.reduce(function(s, d) { return s + d.entropy; }, 0) / (total || 1);
+
+        var counts = {};
+        ROLES.forEach(function(r) { counts[r] = 0; });
+        data.forEach(function(d) { counts[d.suggested_role] = (counts[d.suggested_role] || 0) + 1; });
+        var dominant = Object.keys(counts).reduce(function(a, b) { return counts[a] > counts[b] ? a : b; });
+
+        var html = '';
+        html += '<div class="stat-card"><div class="stat-value">' + total + '</div><div class="stat-label">Sentences</div></div>';
+        html += '<div class="stat-card"><div class="stat-value" style="color:' + (uncertain > 0 ? '#d97706' : '#16a34a') + ';">' + uncertain + '</div><div class="stat-label">Uncertain</div></div>';
+        html += '<div class="stat-card"><div class="stat-value">' + (avgProb * 100).toFixed(1) + '%</div><div class="stat-label">Avg Confidence</div></div>';
+        html += '<div class="stat-card"><div class="stat-value">' + avgEntropy.toFixed(3) + '</div><div class="stat-label">Avg Entropy</div></div>';
+        html += '<div class="stat-card"><div class="stat-value" style="color:' + ROLE_COLORS[dominant] + ';">' + dominant + '</div><div class="stat-label">Dominant Role</div></div>';
+        document.getElementById('stats_bar').innerHTML = html;
     }
 
-    function filter(selected) {
+    /* ──────────── Role Filter Pills ──────────── */
+    function renderFilters(data) {
+        var counts = { 'All': data.length, 'UNCERTAIN': 0 };
+        ROLES.forEach(function(r) { counts[r] = 0; });
+        data.forEach(function(d) {
+            counts[d.suggested_role] = (counts[d.suggested_role] || 0) + 1;
+            if (d.uncertain) counts['UNCERTAIN']++;
+        });
+
+        var container = document.getElementById('role_filters');
+        var html = '';
+
+        // All pill
+        html += '<div class="role-pill' + (activeFilter === 'All' ? ' active' : '') + '" onclick="applyFilter(\'All\')">'
+              + 'All <span class="count">' + counts['All'] + '</span></div>';
+
+        // Uncertain pill
+        html += '<div class="role-pill' + (activeFilter === 'UNCERTAIN' ? ' active' : '') + '" onclick="applyFilter(\'UNCERTAIN\')">'
+              + '<span style="color:#d97706;">&#9888;</span> Uncertain <span class="count">' + counts['UNCERTAIN'] + '</span></div>';
+
+        ROLES.forEach(function(r) {
+            html += '<div class="role-pill' + (activeFilter === r ? ' active' : '') + '" onclick="applyFilter(\'' + r + '\')">'
+                  + '<span class="dot" style="background:' + ROLE_COLORS[r] + ';"></span>'
+                  + r + ' <span class="count">' + (counts[r] || 0) + '</span></div>';
+        });
+
+        container.innerHTML = html;
+    }
+
+    function applyFilter(role) {
+        activeFilter = role;
         var data = JSON.parse(window.localStorage.getItem('data'));
-        if (selected === 'All') {
-            fillTable(data);
-        } else {
-            fillTable(data.filter(function(s) { return s.role === selected; }));
-        }
+        renderFilters(data);
+        renderViewer(data);
     }
 
-    function fillTable(data) {
-        var tablebody = document.getElementById('sentence_table_body');
-        tablebody.innerHTML = '';
-        for (var i = 0; i < data.length; i++) {
-            var tr = document.createElement('tr');
-            if (data[i].uncertain) {
-                tr.style.backgroundColor = '#fff3cd';
+    /* ──────────── Confidence Helpers ──────────── */
+    function confClass(prob) {
+        if (prob >= 0.8) return 'high';
+        if (prob >= 0.5) return 'mid';
+        return 'low';
+    }
+
+    /* ──────────── Document Viewer ──────────── */
+    function renderViewer(data) {
+        var viewer = document.getElementById('document_viewer');
+        var filtered = data;
+
+        if (activeFilter === 'UNCERTAIN') {
+            filtered = data.filter(function(d) { return d.uncertain; });
+        } else if (activeFilter !== 'All') {
+            filtered = data.filter(function(d) { return d.suggested_role === activeFilter; });
+        }
+
+        if (filtered.length === 0) {
+            viewer.innerHTML = '<div class="empty-state"><div class="icon">&#10003;</div><p>No sentences match this filter.</p></div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < filtered.length; i++) {
+            var d = filtered[i];
+            var role = d.suggested_role;
+            var cc = confClass(d.prob);
+            var barWidth = Math.round(d.prob * 100);
+            var entropyPct = Math.round((d.entropy / MAX_ENTROPY) * 100);
+
+            html += '<div class="sent-row' + (d.uncertain ? ' uncertain' : '') + '" data-role="' + role + '" onclick="toggleCorrection(' + d._idx + ')">';
+
+            // Index
+            html += '<div class="sent-index">';
+            if (d.uncertain) html += '<span class="uncertain-icon">&#9888;</span>';
+            else html += (d._idx + 1);
+            html += '</div>';
+
+            // Sentence text
+            html += '<div class="sent-text" id="stxt_' + d._idx + '">' + escapeHtml(d.sentence) + '</div>';
+
+            // Meta: role badge + confidence bar + entropy
+            html += '<div class="sent-meta">';
+            html += '<span class="role-badge" data-role="' + role + '">' + role + '</span>';
+            html += '<div class="confidence-bar-container">'
+                  + '<div class="confidence-bar-track"><div class="confidence-bar-fill bar-' + cc + '" style="width:' + barWidth + '%;"></div></div>'
+                  + '<span class="confidence-label conf-' + cc + '">' + barWidth + '%</span>'
+                  + '</div>';
+            html += '<span class="entropy-label" title="Shannon entropy (0 = certain, ' + MAX_ENTROPY.toFixed(2) + ' = max uncertainty)">H = ' + d.entropy.toFixed(3) + ' (' + entropyPct + '% of max)</span>';
+            html += '</div>';
+
+            html += '</div>'; // end sent-row
+
+            // Word attribution panel (hidden by default)
+            html += '<div class="attribution-row" id="attr_' + d._idx + '"></div>';
+
+            // Correction dropdown panel (hidden by default)
+            html += '<div class="correction-panel" id="corr_' + d._idx + '">';
+            html += '<label>Reassign role:</label>';
+            html += '<select id="sel_' + d._idx + '">';
+            ROLES.forEach(function(r) {
+                html += '<option value="' + r + '"' + (r === role ? ' selected' : '') + '>' + r + '</option>';
+            });
+            html += '</select>';
+            html += '<button class="btn-correct" onclick="event.stopPropagation(); submitCorrection(' + d._idx + ');">&#10003; Confirm Correction</button>';
+            if (d.uncertain) {
+                html += '<span style="font-size:12px;color:#d97706;margin-left:8px;">&#9888; Model confidence below 65% — human review required</span>';
             }
-            var classCell = data[i].uncertain
-                ? '<span style="color:#856404;font-weight:bold;">&#9888; UNCERTAIN</span><br><small>Suggested: ' + data[i].suggested_role + '</small>'
-                : data[i].role;
-            var options = ROLES.map(function(r) {
-                return '<option value="' + r + '"' + (r === data[i].suggested_role ? ' selected' : '') + '>' + r + '</option>';
-            }).join('');
-            var correctionCell = '<select id="sel_' + i + '">' + options + '</select>'
-                + ' <button class="btn btn-xs btn-default" onclick="submitCorrection(' + i + ')">&#10003;</button>';
-            tr.innerHTML = '<th scope="row">' + i + '</th>'
-                + '<td>' + data[i].sentence + '</td>'
-                + '<td>' + classCell + '</td>'
-                + '<td>' + data[i].prob + '</td>'
-                + '<td>' + data[i].entropy + '</td>'
-                + '<td>' + correctionCell + '</td>';
-            tablebody.appendChild(tr);
+            html += '</div>';
         }
+
+        viewer.innerHTML = html;
     }
 
-    function submitCorrection(rowIndex) {
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(text));
+        return div.innerHTML;
+    }
+
+    function toggleCorrection(idx) {
+        var panel = document.getElementById('corr_' + idx);
+        if (!panel) return;
+        panel.classList.toggle('open');
+
+        // Also toggle attribution panel and fetch if needed
+        var attrPanel = document.getElementById('attr_' + idx);
+        if (!attrPanel) return;
+        if (attrPanel.classList.contains('open')) {
+            attrPanel.classList.remove('open');
+            return;
+        }
+        attrPanel.classList.add('open');
+
+        // Only fetch once
+        if (attrPanel.dataset.loaded === 'true') return;
+        fetchAttribution(idx);
+    }
+
+    /* ──────────── Word Attribution ──────────── */
+    var attrCache = {};
+
+    function fetchAttribution(idx) {
         var data = JSON.parse(window.localStorage.getItem('data'));
+        var sentence = data[idx].sentence;
+        var role = data[idx].suggested_role;
+        var color = ROLE_COLORS[role] || '#3b82f6';
+        var attrPanel = document.getElementById('attr_' + idx);
+
+        if (attrCache[idx]) {
+            renderAttribution(attrPanel, attrCache[idx], color);
+            return;
+        }
+
+        attrPanel.innerHTML = '<div class="attr-loading"><span class="mini-spinner"></span>Computing word-level attribution...</div>';
+
+        $.ajax({
+            type: 'POST',
+            url: '/attribution',
+            data: JSON.stringify({ sentence: sentence }),
+            contentType: 'application/json',
+            success: function(resp) {
+                attrCache[idx] = resp.words;
+                attrPanel.dataset.loaded = 'true';
+                renderAttribution(attrPanel, resp.words, color);
+                // Also highlight words in the sentence text cell
+                highlightSentenceText(idx, resp.words, color);
+            },
+            error: function() {
+                attrPanel.innerHTML = '<div class="attr-loading" style="color:#ef4444;">Attribution unavailable.</div>';
+            }
+        });
+    }
+
+    function renderAttribution(container, words, color) {
+        var html = '<div class="attr-legend">';
+        html += '<span>Word influence:</span>';
+        html += '<span style="opacity:0.15;">Low</span>';
+        html += '<div class="grad-bar" style="background:linear-gradient(to right, ' + hexToRgba(color, 0.08) + ', ' + hexToRgba(color, 0.9) + ');"></div>';
+        html += '<span style="font-weight:600;">High</span>';
+        html += '</div>';
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            var opacity = 0.08 + w.score * 0.82;
+            html += '<span class="attr-word" style="background:' + hexToRgba(color, opacity) + ';">';
+            html += escapeHtml(w.word);
+            html += '<span class="attr-tooltip">' + (w.score * 100).toFixed(1) + '% influence</span>';
+            html += '</span> ';
+        }
+        container.innerHTML = html;
+    }
+
+    function highlightSentenceText(idx, words, color) {
+        var cell = document.getElementById('stxt_' + idx);
+        if (!cell) return;
+        var html = '';
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            var opacity = 0.08 + w.score * 0.82;
+            html += '<span style="background:' + hexToRgba(color, opacity) + ';padding:1px 2px;border-radius:3px;">';
+            html += escapeHtml(w.word);
+            html += '</span> ';
+        }
+        cell.innerHTML = html;
+    }
+
+    function hexToRgba(hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+
+    /* ──────────── Histogram ──────────── */
+    function draw_histo() {
+        var items = JSON.parse(window.localStorage.getItem('data'));
+        var counts = {};
+        ROLES.forEach(function(r) { counts[r] = 0; });
+        items.forEach(function(d) { counts[d.suggested_role] = (counts[d.suggested_role] || 0) + 1; });
+
+        var colors = ROLES.map(function(r) { return ROLE_COLORS[r]; });
+        var trace = {
+            x: ROLES,
+            y: ROLES.map(function(r) { return counts[r]; }),
+            type: 'bar',
+            marker: { color: colors, line: { width: 0 }, cornerradius: 6 },
+            hovertemplate: '%{x}: %{y} sentences<extra></extra>'
+        };
+        var layout = {
+            margin: { t: 10, b: 40, l: 50, r: 20 },
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            font: { family: 'Segoe UI, system-ui, sans-serif', size: 12 },
+            yaxis: { title: 'Count', gridcolor: '#f1f5f9' },
+            xaxis: { gridcolor: '#f1f5f9' },
+            bargap: 0.3
+        };
+        Plotly.newPlot('histo', [trace], layout, { responsive: true, displayModeBar: false });
+    }
+
+    /* ──────────── Correction ──────────── */
+    function submitCorrection(idx) {
+        var data = JSON.parse(window.localStorage.getItem('data'));
+        var item = data[idx];
+        var newRole = document.getElementById('sel_' + idx).value;
         var payload = {
-            sentence: data[rowIndex].sentence,
-            predicted_role: data[rowIndex].suggested_role,
-            corrected_role: document.getElementById('sel_' + rowIndex).value
+            sentence: item.sentence,
+            predicted_role: item.suggested_role,
+            corrected_role: newRole
         };
         $.ajax({
             type: 'POST',
@@ -168,7 +919,16 @@
             data: JSON.stringify(payload),
             contentType: 'application/json',
             success: function() {
-                swal('Correction logged', 'The archivist correction has been saved to the audit trail.', 'success');
+                // Update local data with corrected role
+                data[idx].suggested_role = newRole;
+                data[idx].role = newRole;
+                data[idx].uncertain = false;
+                window.localStorage.setItem('data', JSON.stringify(data));
+                swal('Correction Logged', 'Saved to audit trail. The sentence role has been updated.', 'success');
+                renderStats(data);
+                renderFilters(data);
+                renderViewer(data);
+                draw_histo();
             },
             error: function() {
                 swal('Error', 'Could not log correction.', 'error');
@@ -176,26 +936,115 @@
         });
     }
 
+    /* ──────────── Classify ──────────── */
     function performEval() {
         var text = document.getElementById('document_text').value;
+        if (!text || text.trim().length < 10) {
+            swal('Input Required', 'Please paste a BVA decision text to classify.', 'warning');
+            return;
+        }
         var pseudonymize = document.getElementById('pseudonymize_toggle').checked;
+        var btn = document.getElementById('btn_eval');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Classifying...';
+
         $.ajax({
             type: 'POST',
             url: '/doc',
             data: JSON.stringify({ text: text, pseudonymize: pseudonymize }),
             contentType: 'application/json',
-            Accept: 'application/json',
-            cache: false,
-            processData: false,
             success: function(data) {
+                // Tag each item with its original index for stable references
+                for (var i = 0; i < data.length; i++) { data[i]._idx = i; }
                 window.localStorage.setItem('data', JSON.stringify(data));
-                fillTable(data);
+
+                activeFilter = 'All';
+                document.getElementById('results_area').style.display = 'block';
+                renderStats(data);
+                renderFilters(data);
+                renderViewer(data);
                 draw_histo();
-                document.getElementById('btn_download_ead').style.display = 'inline-block';
+                drawTimeline(data);
+                attrCache = {};  // clear attribution cache for new document
+
+                btn.disabled = false;
+                btn.innerHTML = 'Classify Sentences';
+
+                // Scroll to results
+                document.getElementById('results_area').scrollIntoView({ behavior: 'smooth' });
+            },
+            error: function() {
+                btn.disabled = false;
+                btn.innerHTML = 'Classify Sentences';
+                swal('Error', 'Classification failed. Is the server running?', 'error');
             }
         });
     }
 
+    /* ──────────── Confidence Timeline ──────────── */
+    function drawTimeline(data) {
+        var xIdxs = data.map(function(d) { return d._idx + 1; });
+        var yEntropy = data.map(function(d) { return d.entropy; });
+        var yProb = data.map(function(d) { return d.prob; });
+        var colors = data.map(function(d) { return ROLE_COLORS[d.suggested_role] || '#94a3b8'; });
+        var labels = data.map(function(d) {
+            return 'S' + (d._idx + 1) + ': ' + d.suggested_role
+                 + '<br>Conf: ' + (d.prob * 100).toFixed(1) + '%'
+                 + '<br>Entropy: ' + d.entropy.toFixed(3);
+        });
+
+        var traceEntropy = {
+            x: xIdxs, y: yEntropy,
+            type: 'scatter', mode: 'lines+markers',
+            name: 'Entropy',
+            line: { color: '#ef4444', width: 2 },
+            marker: { size: 7, color: colors },
+            text: labels, hoverinfo: 'text',
+            yaxis: 'y'
+        };
+        var traceProb = {
+            x: xIdxs, y: yProb,
+            type: 'scatter', mode: 'lines+markers',
+            name: 'Confidence',
+            line: { color: '#22c55e', width: 2, dash: 'dot' },
+            marker: { size: 5, color: '#22c55e' },
+            yaxis: 'y2'
+        };
+        // Threshold line at the probability that corresponds to uncertain (0.65)
+        var threshLine = {
+            x: [xIdxs[0], xIdxs[xIdxs.length - 1]],
+            y: [0.65, 0.65],
+            type: 'scatter', mode: 'lines',
+            name: 'Uncertainty threshold (0.65)',
+            line: { color: '#d97706', width: 2, dash: 'dash' },
+            yaxis: 'y2'
+        };
+
+        var layout = {
+            margin: { t: 10, b: 40, l: 50, r: 50 },
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            font: { family: 'Segoe UI, system-ui, sans-serif', size: 12 },
+            xaxis: { title: 'Sentence #', gridcolor: '#f1f5f9', dtick: 1 },
+            yaxis: {
+                title: 'Entropy', titlefont: { color: '#ef4444' },
+                tickfont: { color: '#ef4444' },
+                gridcolor: '#f1f5f9', side: 'left', rangemode: 'tozero'
+            },
+            yaxis2: {
+                title: 'Confidence', titlefont: { color: '#22c55e' },
+                tickfont: { color: '#22c55e' },
+                overlaying: 'y', side: 'right',
+                range: [0, 1.05], tickformat: '.0%'
+            },
+            legend: { orientation: 'h', y: -0.25, x: 0.5, xanchor: 'center' },
+            shapes: []
+        };
+
+        Plotly.newPlot('confidence_timeline', [traceEntropy, traceProb, threshLine], layout, { responsive: true, displayModeBar: false });
+    }
+
+    /* ──────────── Finding Aid Download ──────────── */
     function downloadFindingAid() {
         var data = JSON.parse(window.localStorage.getItem('data'));
         if (!data || data.length === 0) {
@@ -204,7 +1053,7 @@
         }
         var payload = {
             sentences: data,
-            title: 'BVA Decision — AI-Assisted Finding Aid',
+            title: 'BVA Decision \u2014 AI-Assisted Finding Aid',
             decision_date: ''
         };
         var xhr = new XMLHttpRequest();
@@ -228,6 +1077,7 @@
         xhr.send(JSON.stringify(payload));
     }
 
+    /* ──────────── Contestation Report ──────────── */
     function loadContestation() {
         $.ajax({
             type: 'GET',
@@ -239,40 +1089,45 @@
                 panel.style.display = 'block';
 
                 if (data.error) {
-                    content.innerHTML = '<div class="alert alert-info">' + data.error + '</div>';
+                    content.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;">' + escapeHtml(data.error) + '</div>';
                     return;
                 }
 
-                var html = '<div class="row">';
-                html += '<div class="col-md-4"><div class="panel panel-default"><div class="panel-heading"><strong>Total Corrections</strong></div>';
-                html += '<div class="panel-body" style="font-size:2em;text-align:center;">' + data.total_corrections + '</div></div></div>';
+                var html = '<div class="contest-grid">';
+                html += '<div class="contest-card"><div class="big-num">' + data.total_corrections + '</div><div class="sub">Total Corrections</div></div>';
+                html += '<div class="contest-card"><div class="big-num" style="color:#ef4444;">' + escapeHtml(data.most_contested_role || 'N/A') + '</div><div class="sub">Most Contested Role</div></div>';
+                html += '</div>';
 
-                html += '<div class="col-md-4"><div class="panel panel-danger"><div class="panel-heading"><strong>Most Contested Role</strong></div>';
-                html += '<div class="panel-body" style="font-size:1.5em;text-align:center;">' + (data.most_contested_role || 'N/A') + '</div></div></div>';
-
-                html += '<div class="col-md-4"><div class="panel panel-info"><div class="panel-heading"><strong>Corrections per Predicted Role</strong></div>';
-                html += '<div class="panel-body"><ul class="list-group">';
+                // Per-role bars
                 if (data.corrections_by_predicted_role) {
+                    html += '<h4 style="margin:16px 0 10px;font-size:14px;font-weight:600;">Corrections per Predicted Role</h4>';
+                    var maxC = Math.max.apply(null, Object.values(data.corrections_by_predicted_role).concat([1]));
                     for (var role in data.corrections_by_predicted_role) {
-                        html += '<li class="list-group-item">' + role + ' <span class="badge">' + data.corrections_by_predicted_role[role] + '</span></li>';
+                        var cnt = data.corrections_by_predicted_role[role];
+                        var pct = Math.round((cnt / maxC) * 100);
+                        html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+                              + '<span style="width:90px;font-size:13px;font-weight:500;">' + escapeHtml(role) + '</span>'
+                              + '<div style="flex:1;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;">'
+                              + '<div style="width:' + pct + '%;height:100%;background:' + (ROLE_COLORS[role] || '#94a3b8') + ';border-radius:4px;"></div></div>'
+                              + '<span style="font-size:12px;font-weight:600;color:#64748b;min-width:24px;">' + cnt + '</span></div>';
                     }
                 }
-                html += '</ul></div></div></div></div>';
 
-                // Confusion pairs table
+                // Confusion matrix
                 if (data.confusion_pairs && Object.keys(data.confusion_pairs).length > 0) {
-                    html += '<h3>Confusion Pairs (Predicted → Corrected)</h3>';
-                    html += '<table class="table table-bordered table-condensed"><thead><tr><th>Predicted</th><th>Corrected To</th><th>Count</th></tr></thead><tbody>';
+                    html += '<h4 style="margin:20px 0 10px;font-size:14px;font-weight:600;">Confusion Matrix (Predicted &rarr; Corrected)</h4>';
+                    html += '<table class="table table-bordered table-condensed" style="font-size:13px;"><thead><tr><th>Predicted</th><th>Corrected To</th><th>Count</th></tr></thead><tbody>';
                     for (var pred in data.confusion_pairs) {
                         for (var corr in data.confusion_pairs[pred]) {
-                            var cls = pred !== corr ? 'danger' : 'success';
-                            html += '<tr class="' + cls + '"><td>' + pred + '</td><td>' + corr + '</td><td>' + data.confusion_pairs[pred][corr] + '</td></tr>';
+                            var highlight = pred !== corr ? 'background:#fef2f2;' : 'background:#f0fdf4;';
+                            html += '<tr style="' + highlight + '"><td>' + escapeHtml(pred) + '</td><td>' + escapeHtml(corr) + '</td><td><strong>' + data.confusion_pairs[pred][corr] + '</strong></td></tr>';
                         }
                     }
                     html += '</tbody></table>';
                 }
 
                 content.innerHTML = html;
+                panel.scrollIntoView({ behavior: 'smooth' });
             },
             error: function() {
                 swal('Error', 'Could not load contestation report.', 'error');

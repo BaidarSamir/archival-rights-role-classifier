@@ -19,6 +19,8 @@ This is a decision-support tool, not a full automation system. Archivists mainta
 3. **Correction audit trail**: Archivists can override any prediction. Every correction is logged with a timestamp to a CSV file for accountability and retraining.
 4. **EAD3 finding aid generation**: Classified sentences are automatically structured into valid [Encoded Archival Description (EAD3)](https://www.loc.gov/ead/) XML documents for archival management systems.
 5. **Label contestation analysis**: The correction log shows which roles the model most frequently misclassifies, helping target model improvements.
+6. **Confidence timeline visualization**: Dual-axis chart shows entropy and confidence across the document to identify uncertain regions.
+7. **Word-level attribution**: Gradient-based explainability highlights which words most influenced each prediction, enabling archivists to understand model reasoning.
 
 ---
 
@@ -64,8 +66,9 @@ By flagging uncertain classifications and keeping the correction audit trail, th
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Web Interface (HTML/JS)                     │
-│  Text Input → [Pseudonymise?] → Evaluate → Results Table            │
-│  Uncertainty Filter │ Correction Dropdown │ Download EAD-XML         │
+│  Text Input → [Pseudonymise?] → Evaluate → Results Dashboard        │
+│  Confidence Timeline │ Role Distribution │ Sentence Cards           │
+│  Word Attribution (on click) │ Correction Dropdown │ EAD-XML        │
 │  Label Contestation Report                                          │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │ HTTP (FastAPI)
@@ -89,9 +92,14 @@ By flagging uncertain classifications and keeping the correction audit trail, th
 │     └─ Entropy computation: H = −Σ(pᵢ · log pᵢ)                  │
 │     └─ Uncertainty flag: max(p) < 0.65 → UNCERTAIN                 │
 │                                                                     │
-│  5. Finding Aid Generator → EAD3 XML                               │
-│  6. Correction Logger → CSV audit trail                             │
-│  7. Contestation Analyser → disagreement statistics                 │
+│  5. Word Attribution (on-demand)                                    │
+│     └─ Input×gradient through BERT→LSTM pipeline                    │
+│     └─ Subword-to-word token merging                                │
+│     └─ Normalized saliency scores [0,1]                             │
+│                                                                     │
+│  6. Finding Aid Generator → EAD3 XML                               │
+│  7. Correction Logger → CSV audit trail                             │
+│  8. Contestation Analyser → disagreement statistics                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -166,7 +174,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 3. Install dependencies
-pip install fastapi uvicorn sentence-transformers spacy torch pandas numpy jinja2 pydantic tqdm
+pip install fastapi uvicorn sentence-transformers transformers spacy torch pandas numpy jinja2 pydantic tqdm
 
 # 4. Download spaCy language models
 python -m spacy download en_core_web_lg
@@ -228,6 +236,76 @@ pip install scikit-learn seaborn matplotlib
 
 ---
 
+## Web Interface Features
+
+The system provides a modern, intuitive web interface with advanced explainability features:
+
+### Interface Overview
+
+![Header Banner](interface/01_header_banner.png)
+
+![Input Area](interface/02_input_area.png)
+
+### Analytics Dashboard
+
+**Statistics Bar** — Real-time metrics summarizing document analysis:
+
+![Stats Bar](interface/03_stats_bar.png)
+
+- Total sentence count
+- Uncertain predictions requiring review
+- Average confidence across all predictions
+- Average Shannon entropy
+- Dominant rhetorical role in the document
+
+**Confidence & Entropy Timeline** — Visualize model certainty throughout the document:
+
+![Confidence Timeline](interface/04_confidence_timeline.png)
+
+- **Red line (left axis)**: Shannon entropy per sentence (higher = more uncertain)
+- **Green dotted line (right axis)**: Confidence percentage per sentence
+- **Orange dashed line**: Uncertainty threshold (0.65) — sentences above this entropy require human review
+- Helps identify sections of the document where the model struggles
+
+**Role Distribution Chart** — Breakdown of rhetorical roles:
+
+![Role Distribution](interface/05_role_distribution.png)
+
+Shows the count of each rhetorical role type in the classified document, color-coded by role.
+
+### Interactive Document Viewer
+
+**Filter Pills** — Filter sentences by role or uncertainty status:
+
+![Filter Pills](interface/06_filter_pills.png)
+
+Click any role pill to show only sentences of that type. The "Uncertain" filter isolates predictions needing review.
+
+**Sentence Cards** — Color-coded cards with expandable details:
+
+![Sentence Cards](interface/07_sentence_cards.png)
+
+Each sentence card displays:
+- Sentence number and text
+- Color-coded left border indicating predicted role
+- Role badge with confidence percentage
+- Entropy value with percentage of maximum uncertainty
+- Yellow border + ⚠ icon for uncertain predictions
+
+### Explainability Features
+
+**Word-Level Attribution Highlighting** — Click any sentence to reveal which words most influenced the model's prediction:
+
+- Gradient-colored word highlighting (low to high influence)
+- Hover tooltips showing exact influence percentage per word
+- Visual gradient legend bar
+- Lazy-loaded on demand to minimize computational overhead
+- Uses **input×gradient** attribution through the full BERT→LSTM pipeline
+
+**Correction Interface** — Dropdown to reassign incorrect predictions with audit trail logging.
+
+---
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -237,6 +315,7 @@ pip install scikit-learn seaborn matplotlib
 | `POST` | `/correct` | Log archivist correction. Body: `{"sentence": "...", "predicted_role": "...", "corrected_role": "..."}` |
 | `POST` | `/finding-aid` | Generate EAD3 XML. Body: `{"sentences": [...], "title": "...", "decision_date": "..."}` |
 | `GET` | `/contestation` | Return label contestation statistics as JSON |
+| `POST` | `/attribution` | Compute word-level attribution. Body: `{"sentence": "..."}` Returns word influence scores |
 
 ---
 
@@ -258,6 +337,50 @@ The bidirectional LSTM with LegalBERT embeddings, trained with Dice Loss on the 
 | **EAD3 (not EAD 2002)** | EAD3 is the current standard maintained by SAA/LoC since 2015 |
 | **CSV correction log (not database)** | Simple, portable, transparent. Archivists can inspect/edit/export the log directly. |
 | **Dice Loss (not Cross-Entropy)** | Handles severe class imbalance (Sentence class dominates) without explicit class weighting |
+| **Input×gradient attribution** | Efficient gradient-based word attribution through BERT→LSTM pipeline without requiring SHAP or LIME |
+| **Dual-axis timeline chart** | Shows both entropy (uncertainty) and confidence on same plot to reveal model behavior patterns |
+
+---
+
+## Technical Implementation: Explainability Features
+
+### Word-Level Attribution
+
+The word attribution system traces how individual words influence the final classification decision through the complete model pipeline:
+
+**Pipeline**: BERT tokenization → token embeddings → mean pooling → LSTM → softmax
+
+**Attribution Method**: Input×gradient saliency
+1. Tokenize sentence with LegalBERT tokenizer (`nlpaueb/legal-bert-base-uncased`)
+2. Forward pass through BERT to get token embeddings (768-d vectors per token)
+3. Apply mean pooling across tokens to create sentence embedding
+4. Pass through bidirectional LSTM (768→16 hidden units)
+5. Compute logits and softmax for 6 classes
+6. Backpropagate from predicted class logit to BERT token embeddings
+7. Multiply embedding gradients by original embeddings (input×gradient)
+8. Take L2 norm across embedding dimensions to get per-token saliency
+9. Merge BERT subword tokens back to words using token offsets
+10. Normalize scores to [0,1] range for visualization
+
+**Frontend**: Words are highlighted with gradient opacity (low to high influence) with hover tooltips. Attribution is computed lazily (only when a sentence is clicked) to minimize server load.
+
+**Backend endpoint**: `POST /attribution` accepts a sentence string and returns `{words: [...], scores: [...]}`.
+
+### Confidence Timeline Chart
+
+The timeline chart visualizes model confidence across the document using Plotly.js:
+
+- **X-axis**: Sentence index (1, 2, 3, ...)
+- **Left Y-axis**: Shannon entropy (red line, 0 to ~0.09 typical range)
+- **Right Y-axis**: Confidence percentage (green dotted line, 0% to 100%)
+- **Uncertainty threshold**: Orange dashed line at H=0.65 cutoff
+
+This dual-axis visualization helps archivists quickly identify:
+- Uncertain regions of the document (entropy peaks)
+- Confidence dips that might indicate edge cases
+- Document sections requiring focused human review
+
+**Implementation**: Entropy and confidence are computed during classification (no additional API call needed). The chart is rendered client-side after classification completes.
 
 ---
 
@@ -267,6 +390,7 @@ This project demonstrates practical skills for modern archival work:
 
 - **Digital preservation**: Generates standards-compliant finding aids (EAD3) from unstructured legal text
 - **Appraisal under uncertainty**: Entropy flagging recognizes that classification requires interpretation, not just automation
+- **Explainable AI for archival decision-making**: Word-level attribution and confidence visualization help archivists verify model reasoning and identify potential misclassifications
 - **Data protection**: PII pseudonymisation follows GDPR principles of data minimization
 - **Accountability**: The correction audit trail documents archival decision-making
 - **Human rights documentation**: Works with veterans' rights claims where archival accuracy affects access to benefits

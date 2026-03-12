@@ -18,6 +18,101 @@ from torch.utils.data import DataLoader
 from src.classification.custom_pytorch_dataset import CustomDataset
 from src.classification.nn_models import LSTM_Net
 
+# ── Cached models for word-level attribution ──
+_bert_model = None
+_bert_tokenizer = None
+
+
+def _get_bert():
+    """Lazy-load and cache the LegalBERT model + tokenizer for attribution."""
+    global _bert_model, _bert_tokenizer
+    if _bert_model is None:
+        from transformers import AutoTokenizer, AutoModel
+        _bert_tokenizer = AutoTokenizer.from_pretrained("nlpaueb/legal-bert-base-uncased")
+        _bert_model = AutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
+        _bert_model.eval()
+    return _bert_model, _bert_tokenizer
+
+
+def compute_word_attribution(sentence_text, lstm_model, weight_path):
+    """Compute word-level saliency scores using input × gradient through BERT→LSTM.
+
+    Returns a list of {"word": str, "score": float} where score is in [0, 1].
+    """
+    bert, tokenizer = _get_bert()
+
+    device = torch.device("cpu")
+    lstm_model.load_state_dict(torch.load(weight_path, map_location=device, weights_only=True))
+    lstm_model.to(device)
+    lstm_model.eval()
+
+    # Tokenize
+    encoded = tokenizer(
+        sentence_text, return_tensors="pt", truncation=True,
+        max_length=512, padding=True,
+    )
+    tokens = tokenizer.convert_ids_to_tokens(encoded["input_ids"][0])
+
+    # Get input embeddings with gradient tracking
+    input_embeds = bert.embeddings.word_embeddings(encoded["input_ids"])
+    input_embeds = input_embeds.detach().requires_grad_(True)
+
+    # Forward through BERT using custom embeddings
+    outputs = bert(
+        inputs_embeds=input_embeds,
+        attention_mask=encoded["attention_mask"],
+    )
+
+    # Mean pooling (matches sentence-transformers default)
+    mask = encoded["attention_mask"].unsqueeze(-1).float()
+    sentence_emb = (outputs.last_hidden_state * mask).sum(1) / mask.sum(1)
+
+    # Forward through LSTM
+    lstm_input = sentence_emb.unsqueeze(0)  # [1, 1, 768]
+    logits = lstm_model(lstm_input)
+    probs = torch.softmax(logits, dim=1)
+    pred_idx = probs.argmax(dim=1).item()
+
+    # Backward from predicted class
+    probs[0, pred_idx].backward()
+
+    # Input × gradient per token
+    grad = input_embeds.grad[0]  # [seq_len, 768]
+    importance = (grad * input_embeds.detach()[0]).sum(dim=-1).abs()
+
+    # Zero out special tokens
+    importance[0] = 0   # [CLS]
+    importance[-1] = 0  # [SEP]
+
+    # Normalize to [0, 1]
+    max_imp = importance.max()
+    if max_imp > 0:
+        importance = importance / max_imp
+
+    # Merge subword tokens back to words
+    words = []
+    scores = []
+    current_word = ""
+    current_scores = []
+
+    for token, score in zip(tokens, importance.tolist()):
+        if token in ("[CLS]", "[SEP]", "[PAD]"):
+            continue
+        if token.startswith("##"):
+            current_word += token[2:]
+            current_scores.append(score)
+        else:
+            if current_word:
+                words.append(current_word)
+                scores.append(max(current_scores))
+            current_word = token
+            current_scores = [score]
+    if current_word:
+        words.append(current_word)
+        scores.append(max(current_scores))
+
+    return [{"word": w, "score": round(s, 3)} for w, s in zip(words, scores)]
+
 
 ### The dataframe needs an column "embedding" and "label_encoded" e.g. for confusion matrix
 ###returns previous dataframe incl. now predicted labels and probability

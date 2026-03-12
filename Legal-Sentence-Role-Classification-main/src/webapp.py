@@ -38,6 +38,10 @@ class FindingAidRequest(BaseModel):
     decision_date: str = ""
 
 
+class AttributionRequest(BaseModel):
+    sentence: str
+
+
 app = FastAPI()
 
 templates = Jinja2Templates(directory="web_app_templates")
@@ -156,6 +160,18 @@ async def contestation_report():
         "most_contested_role": most_contested,
         "confusion_pairs": confusion,
     }
+
+
+@app.post("/attribution")
+async def word_attribution(req: AttributionRequest):
+    """Compute word-level saliency for a single sentence using input × gradient."""
+    path = os.path.dirname(os.path.abspath(__file__))
+    weight_path = os.path.join(path, '..', 'data', 'model_weights',
+                               'LSTM Net_balanced_DICE_batch_size_1.dat')
+    words = classifier.compute_word_attribution(
+        req.sentence, LSTM_Net(), weight_path
+    )
+    return {"words": words}
 
 
 @app.get("/")

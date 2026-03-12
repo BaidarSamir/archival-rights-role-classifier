@@ -10,17 +10,9 @@
 
 ## Abstract
 
-This system classifies sentences in U.S. Board of Veterans' Appeals (BVA) decisions into six rhetorical roles: **Citation**, **Evidence**, **Finding of Fact**, **Legal Rule**, **Reasoning**, and **General Sentence**. It uses a bidirectional LSTM neural network with LegalBERT embeddings.
+Archival processing of legal documents requires classifying text segments into structured schemas to enable scholarly access, yet manual classification is labor-intensive for large corpora. Existing machine learning approaches to legal text classification often present predictions as authoritative outputs, obscuring model uncertainty and limiting professional oversight — a problematic design choice when archival decisions directly affect access to records documenting human rights claims. We present a hybrid human-AI system for classifying sentences in U.S. Board of Veterans' Appeals (BVA) decisions into six rhetorical roles (**Citation**, **Evidence**, **Finding of Fact**, **Legal Rule**, **Reasoning**, and **General Sentence**) using a bidirectional LSTM with LegalBERT embeddings (768-dimensional sentence representations). Rather than automating archival judgment, the system is designed to surface uncertainty and scaffold expert deliberation.
 
-This is a decision-support tool, not a full automation system. Archivists maintain final control over all classifications. Features include:
-
-1. **Uncertainty quantification**: Shannon entropy flags ambiguous predictions (max probability < 0.65) as `UNCERTAIN` for mandatory human review.
-2. **PII pseudonymisation**: Named entity recognition detects and replaces personally identifiable information before classification.
-3. **Correction audit trail**: Archivists can override any prediction. Every correction is logged with a timestamp to a CSV file for accountability and retraining.
-4. **EAD3 finding aid generation**: Classified sentences are automatically structured into valid [Encoded Archival Description (EAD3)](https://www.loc.gov/ead/) XML documents for archival management systems.
-5. **Label contestation analysis**: The correction log shows which roles the model most frequently misclassifies, helping target model improvements.
-6. **Confidence timeline visualization**: Dual-axis chart shows entropy and confidence across the document to identify uncertain regions.
-7. **Word-level attribution**: Gradient-based explainability highlights which words most influenced each prediction, enabling archivists to understand model reasoning.
+The interface integrates uncertainty quantification (Shannon entropy thresholding at 0.65 to flag ambiguous predictions for mandatory human review), explainability mechanisms (word-level input×gradient attribution through the BERT→LSTM pipeline and dual-axis confidence timelines), PII pseudonymisation via named entity recognition, timestamped correction audit trails for accountability and model retraining, contestation reports showing systematic classification disagreements, and automated generation of standards-compliant EAD3 XML finding aids. Archivists retain final authority over all classifications: every prediction can be inspected, explained via gradient-based attribution, and overridden through an inline correction interface. This design philosophy — explicitly surfacing rather than concealing model limitations — reflects archival science's recognition that classification is an interpretive act with material consequences for how researchers access records of veterans' disability claims.
 
 ---
 
